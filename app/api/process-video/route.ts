@@ -2,24 +2,18 @@ import { apiEndpoints } from '@/lib/config'
 
 export async function POST(request: Request) {
   try {
-    const { videoPath, numberOfShorts, autoUpload } = await request.json()
+    const formData = await request.formData()
 
     // Call the backend API to process the video
+    // We forward the formData directly. Browser/fetch will set the correct Content-Type with boundary.
     const response = await fetch(apiEndpoints.processVideo, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        videoPath,
-        numberOfShorts,
-        autoUpload,
-        sequential: true
-      }),
+      body: formData,
     })
 
     if (!response.ok) {
-      throw new Error(`Backend API error: ${response.statusText}`)
+      const errorText = await response.text()
+      throw new Error(`Backend API error: ${response.status} ${errorText}`)
     }
 
     const data = await response.json()

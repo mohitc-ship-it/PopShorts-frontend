@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation"
 export default function CreatePage() {
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoSource, setVideoSource] = useState<"file" | "youtube">("file")
   const [numberOfShorts, setNumberOfShorts] = useState(5)
   const [autoPublish, setAutoPublish] = useState(false)
@@ -20,21 +21,37 @@ export default function CreatePage() {
   const [youtubeUrl, setYoutubeUrl] = useState("")
 
   const handleGenerate = async () => {
-    if (!videoPath && !youtubeUrl) {
-      alert("Please upload a video or provide a YouTube URL")
+    if (videoSource === "file" && !videoFile) {
+      alert("Please upload a video file")
+      return
+    }
+
+    if (videoSource === "youtube" && !youtubeUrl) {
+      alert("Please provide a YouTube URL")
       return
     }
 
     setIsLoading(true)
     try {
+      const formData = new FormData()
+
+      if (videoSource === "file" && videoFile) {
+        formData.append("video", videoFile)
+      } else if (videoSource === "youtube") {
+        // Note: Backend currently expects 'video' file. 
+        // If supporting YouTube URL, backend needs update. 
+        // Sending as 'youtube_url' for potential future support or middleware handling.
+        formData.append("youtube_url", youtubeUrl)
+      }
+
+      formData.append("number_of_shorts", numberOfShorts.toString())
+      formData.append("auto_upload", autoPublish.toString())
+      formData.append("mode", "sequential") // Hardcoded based on backend requirement
+
       const response = await fetch("/api/process-video", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          videoPath: videoPath || youtubeUrl,
-          numberOfShorts,
-          autoUpload: autoPublish,
-        }),
+        // Content-Type header is skipped so browser sets generic multipart/form-data with boundary
+        body: formData,
       })
 
       const data = await response.json()
@@ -43,7 +60,7 @@ export default function CreatePage() {
         // Pass shorts data to results page via URL state
         router.push(`/results?shorts=${encodeURIComponent(JSON.stringify(data.shorts))}&autoUpload=${autoPublish}`)
       } else {
-        alert("Failed to generate shorts")
+        alert(data.error || "Failed to generate shorts")
       }
     } catch (error) {
       console.error("Error:", error)
@@ -93,6 +110,7 @@ export default function CreatePage() {
                     const file = e.target.files?.[0]
                     if (file) {
                       setVideoPath(file.name)
+                      setVideoFile(file)
                     }
                   }}
                 />
