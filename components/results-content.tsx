@@ -27,6 +27,7 @@ export default function ResultsContent() {
   const [selectedShorts, setSelectedShorts] = useState<number[]>([])
   const [autoUpload, setAutoUpload] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [playingShortIndex, setPlayingShortIndex] = useState<number | null>(null)
   const searchParams = useSearchParams()
 
   useEffect(() => {
@@ -134,6 +135,24 @@ export default function ResultsContent() {
     return "text-muted-foreground"
   }
 
+  const getVideoUrl = (short: Short) => {
+    // If it's a full URL (like S3 or remote storage), use it directly
+
+    if (short.url && short.url.startsWith("http")) {
+      return short.url
+    }
+    if (short.subtitleAddedVideo.startsWith("http")) {
+      return short.subtitleAddedVideo
+    }
+    // Otherwise construct local backend URL
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000"
+    // Ensure we don't double slash if path already has leading slash
+    const path = short.subtitleAddedVideo.startsWith("/")
+      ? short.subtitleAddedVideo
+      : `/${short.subtitleAddedVideo}`
+    return `${backendUrl}${path}`
+  }
+
   return (
     <>
       {/* Header */}
@@ -172,39 +191,67 @@ export default function ResultsContent() {
             {shorts.map((short, index) => (
               <Card
                 key={index}
-                className="bg-card border-border overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group"
-                onClick={() => toggleShort(index)}
+                className="bg-card border-border overflow-hidden hover:shadow-lg transition-shadow bg-card"
               >
                 {/* Video Preview */}
-                <div className="relative aspect-video bg-muted overflow-hidden">
-                  <img
-                    src={`/placeholder.svg?height=400&width=225&query=YouTube+Short+video+preview+thumbnail`}
-                    alt={short.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                  />
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                    <div
-                      className={`w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center transition-transform ${
-                        selectedShorts.includes(index) ? "scale-100" : "group-hover:scale-100 scale-0"
-                      }`}
-                    >
-                      {selectedShorts.includes(index) ? "✓" : "▶"}
-                    </div>
-                  </div>
-                  {short.url && (
-                    <div className="absolute top-3 left-3 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded">
-                      Uploaded
-                    </div>
+                <div
+                  className="relative aspect-video bg-muted overflow-hidden cursor-pointer group"
+                  onClick={() => toggleShort(index)}
+                >
+                  {playingShortIndex === index ? (
+                    <video
+                      src={getVideoUrl(short)}
+                      controls
+                      autoPlay
+                      className="w-full h-full object-contain bg-black"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <>
+                      <img
+                        src={`/placeholder.svg?height=400&width=225&query=YouTube+Short+video+preview+thumbnail`}
+                        alt={short.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                      />
+                      <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center">
+                        <div
+                          className={`w-16 h-16 rounded-full bg-primary text-primary-foreground flex items-center justify-center transition-transform ${selectedShorts.includes(index) ? "scale-100" : "group-hover:scale-100 scale-0"
+                            }`}
+                        >
+                          {selectedShorts.includes(index) ? "✓" : "▶"}
+                        </div>
+                        {/* Play Button Overlay (only visible if not selected, or maybe always accessible?) 
+                            Let's make a specific play button area or just clicking center plays if not selection mode?
+                            Actually, let's add a explicit play button in the center that stops propagation to avoid selection toggle if clicked.
+                        */}
+                        <button
+                          className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setPlayingShortIndex(index)
+                          }}
+                        >
+                          <div className="w-12 h-12 rounded-full bg-black/50 text-white flex items-center justify-center backdrop-blur-sm hover:scale-110 transition-transform">
+                            ▶
+                          </div>
+                        </button>
+                      </div>
+                      {short.url && (
+                        <div className="absolute top-3 left-3 bg-green-500 text-white text-xs font-semibold px-2 py-1 rounded">
+                          Uploaded
+                        </div>
+                      )}
+                      <div className="absolute top-3 right-3 bg-foreground text-background text-xs font-semibold px-2 py-1 rounded">
+                        {short.end_time - short.start_time > 60
+                          ? Math.floor((short.end_time - short.start_time) / 60) + "m"
+                          : Math.round(short.end_time - short.start_time) + "s"}
+                      </div>
+                    </>
                   )}
-                  <div className="absolute top-3 right-3 bg-foreground text-background text-xs font-semibold px-2 py-1 rounded">
-                    {short.end_time - short.start_time > 60
-                      ? Math.floor((short.end_time - short.start_time) / 60) + "m"
-                      : Math.round(short.end_time - short.start_time) + "s"}
-                  </div>
                 </div>
 
                 {/* Content */}
-                <div className="p-4">
+                <div className="p-4" onClick={() => toggleShort(index)}>
                   <h3 className="font-semibold text-foreground mb-3 text-sm line-clamp-2 group-hover:text-primary transition-colors">
                     {short.title}
                   </h3>
@@ -239,7 +286,7 @@ export default function ResultsContent() {
 
                     {/* YouTube URL if uploaded */}
                     {short.url && (
-                      <div>
+                      <div onClick={(e) => e.stopPropagation()}>
                         <p className="text-xs text-muted-foreground mb-1">YouTube Link</p>
                         <a
                           href={short.url}
@@ -261,7 +308,16 @@ export default function ResultsContent() {
 
                   {/* Action Buttons */}
                   <div className="flex gap-2 flex-col sm:flex-row">
-                    <Button size="sm" variant="outline" className="border-border hover:bg-muted flex-1 bg-transparent">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="border-border hover:bg-muted flex-1 bg-transparent"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        // Handle download
+                        window.open(getVideoUrl(short), '_blank')
+                      }}
+                    >
                       <Download className="w-3 h-3 mr-1" />
                       Download
                     </Button>
@@ -270,6 +326,11 @@ export default function ResultsContent() {
                         size="sm"
                         variant="outline"
                         className="border-border hover:bg-muted flex-1 bg-transparent"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigator.clipboard.writeText(short.url || "")
+                          alert("Link copied!")
+                        }}
                       >
                         <Share2 className="w-3 h-3 mr-1" />
                         Share
